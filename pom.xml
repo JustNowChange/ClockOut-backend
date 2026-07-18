@@ -20,6 +20,22 @@
         <java.version>11</java.version>
     </properties>
 
+    <repositories>
+        <repository>
+            <id>aliyunmaven</id>
+            <name>aliyunmaven</name>
+            <url>https://maven.aliyun.com/repository/public</url>
+        </repository>
+    </repositories>
+
+    <pluginRepositories>
+        <pluginRepository>
+            <id>aliyunmaven</id>
+            <name>aliyunmaven</name>
+            <url>https://maven.aliyun.com/repository/public</url>
+        </pluginRepository>
+    </pluginRepositories>
+
     <dependencies>
         <!-- Spring Web -->
         <dependency>
@@ -46,7 +62,7 @@
         <dependency>
             <groupId>org.mybatis.spring.boot</groupId>
             <artifactId>mybatis-spring-boot-starter</artifactId>
-            <version>3.0.3</version>
+            <version>2.3.2</version>
         </dependency>
 
         <!-- 测试 -->
