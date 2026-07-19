@@ -11,7 +11,7 @@ public interface ClockMapper {
     @Select("select * from study_days")
     List<days> getlist();
 
-    @Update("update study_days set status = 1, complete_time = NOW() where id = #{id}")
+    @Update("update study_days set status = 1, completeTime = NOW() where id = #{id}")
     void updateStatus(int id);
 
     @Select("select * from study_days where id = #{id}")
