@@ -30,4 +30,9 @@ public class Controller {
         days day = clockService.getDetail(dayId);
         return Result.success(day);
     }
+
+    @GetMapping("/health")
+    public Result<String> health() {
+        return Result.success("ok");
+    }
 }
