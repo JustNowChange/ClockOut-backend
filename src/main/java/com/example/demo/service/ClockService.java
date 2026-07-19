@@ -8,4 +8,6 @@ public interface ClockService {
     List<days> getlist();
 
     void updateStatus(int id);
+
+    days getDetail(int id);
 }

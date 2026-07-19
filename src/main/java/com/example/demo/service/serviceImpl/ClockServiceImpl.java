@@ -23,4 +23,8 @@ public class ClockServiceImpl implements ClockService {
     public void updateStatus(int id) {
         clockMapper.updateStatus(id);
     }
+
+    public days getDetail(int id) {
+        return clockMapper.getDetail(id);
+    }
 }

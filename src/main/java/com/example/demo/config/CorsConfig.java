@@ -14,7 +14,7 @@ public class CorsConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.addAllowedOriginPattern("*");
         config.addAllowedHeader("*");
-        config.addAllowedOrigin("https://clockout.pages.dev/");
+        config.addAllowedOrigin("https://clockout.pages.dev");
         config.addAllowedMethod("*");
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
