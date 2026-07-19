@@ -1,0 +1,5 @@
+target
+build
+.git
+.gitignore
+node_modules
