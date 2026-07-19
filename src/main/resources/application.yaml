@@ -7,11 +7,13 @@ spring:
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:123456}
     driver-class-name: com.mysql.cj.jdbc.Driver
-    continue-on-error: true
   servlet:
     multipart:
       max-file-size: 10MB
       max-request-size: 20MB
+  sql:
+    init:
+      continue-on-error: true
 upload:
   local-path: ${UPLOAD_LOCAL_PATH:/tmp/uploads/}
   access-prefix: /image/
