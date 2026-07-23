@@ -1,34 +1,19 @@
 package com.example.demo.config;
 
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-import org.springframework.web.filter.CorsFilter;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
-
-import java.util.Arrays;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
-public class CorsConfig {
-
-    @Bean
-    public CorsFilter corsFilter() {
-        // 1. 新建跨域配置
-        CorsConfiguration config = new CorsConfiguration();
-        config.addAllowedOrigin("https://clockout.pages.dev/");
-        config.addAllowedMethod("GET");
-        config.addAllowedMethod("POST");
-        config.addAllowedMethod("PUT");
-        config.addAllowedMethod("DELETE");
-        config.addAllowedMethod("OPTIONS");
-        config.setAllowCredentials(true);
-        config.setMaxAge(3600L);
-
-        // 2. 绑定路径
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", config);
-
-        return new CorsFilter(source);
+public class CorsConfig implements WebMvcConfigurer {
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/**")
+                // 精准填写当前前端完整域名
+                .allowedOrigins("https://1b86f76b.clockout.pages.dev")
+                // 必须放行OPTIONS预检
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                .allowCredentials(true)
+                .maxAge(3600);
     }
 }
