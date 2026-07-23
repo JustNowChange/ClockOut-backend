@@ -1,5 +1,5 @@
 server:
-  port: ${SERVER_PORT:8080}
+  port: ${SERVER_PORT}
 
 spring:
   datasource:
@@ -14,8 +14,9 @@ spring:
   sql:
     init:
       continue-on-error: true
+
 upload:
-  local-path: ${UPLOAD_LOCAL_PATH:/tmp/uploads/}
+  local-path: ${UPLOAD_LOCAL_PATH}
   access-prefix: /image/
 
 management:
@@ -23,6 +24,12 @@ management:
     web:
       exposure:
         include: health
+sky:
+  jwt:
+    secret-key: MicroDev123456789abcdef12345678abcdxyz
+    ttl: 86400000
+    token-name: token
+
 
 mybatis:
   mapper-locations: classpath:mapper/*.xml
