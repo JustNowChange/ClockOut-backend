@@ -9,6 +9,8 @@ public class CorsConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
+                // 允许所有域名访问
+                .allowedOrigins("*")
                 // 精准填写当前前端完整域名
                 .allowedOrigins("https://clockout.pages.dev")
                 // 必须放行OPTIONS预检
