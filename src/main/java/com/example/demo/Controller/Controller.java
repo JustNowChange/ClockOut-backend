@@ -34,7 +34,7 @@ public class Controller {
      * @return
      */
     @GetMapping("/clock/detail/{dayId}")
-    public Result<days> getClockDetail(@PathVariable("dayId") Integer dayId) {
+    public Result<days> getClockDetail(@PathVariable Integer dayId) {
         days day = clockService.getDetail(dayId);
         return Result.success(day);
     }

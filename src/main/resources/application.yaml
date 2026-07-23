@@ -14,7 +14,6 @@ spring:
   sql:
     init:
       continue-on-error: true
-
 upload:
   local-path: ${UPLOAD_LOCAL_PATH}
   access-prefix: /image/
