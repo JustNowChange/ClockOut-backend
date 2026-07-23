@@ -10,7 +10,7 @@ public class CorsConfig implements WebMvcConfigurer {
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
                 // 精准填写当前前端完整域名
-                .allowedOrigins("https://1b86f76b.clockout.pages.dev")
+                .allowedOrigins("https://clockout.pages.dev")
                 // 必须放行OPTIONS预检
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowCredentials(true)
