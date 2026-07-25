@@ -13,7 +13,7 @@ public class CorsConfig implements WebMvcConfigurer {
                 .allowedOrigins("*")
                 // 精准填写当前前端完整域名
                 .allowedOrigins("https://clockout.pages.dev")
-                .allowedOrigins("http://localhost:5173") // 本地前端地址
+//                .allowedOrigins("http://localhost:5173") // 本地前端地址
                 // 必须放行OPTIONS预检
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowCredentials(true)
