@@ -9,10 +9,7 @@ import com.example.demo.service.UserService;
 import com.example.demo.un.user;
 import com.example.demo.utils.JWTutil;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -54,5 +51,21 @@ public class loginController {
                 .build();
 
         return Result.success(employeeLoginVO);
+    }
+
+    @GetMapping("/user-info/{id}")
+    public Result<userVO> getUserInfo(@PathVariable int id) {
+
+        user user = userService.getUserInfo(id);
+
+        //拷贝
+        userVO employeeLoginVO = userVO.builder()
+                .id(user.getId())
+                .name(user.getName())
+                .status(user.getStatus())
+                .build();
+
+        return Result.success(employeeLoginVO);
+
     }
 }

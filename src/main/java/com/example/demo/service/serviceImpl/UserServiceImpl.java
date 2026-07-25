@@ -35,4 +35,17 @@ public class UserServiceImpl implements UserService {
         System.out.println("登录成功");
         return user;
     }
+
+    /**
+     * 获取用户信息
+     * TODO 退出的时候需要更改登录状态
+     * @return
+     */
+    public user getUserInfo(int id) {
+
+        return userMapper.getUserInfo(id);
+
+    }
+
+
 }

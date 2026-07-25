@@ -5,4 +5,6 @@ import com.example.demo.un.user;
 
 public interface UserService {
     user login(userRequest employee);
+
+    user getUserInfo(int id);
 }

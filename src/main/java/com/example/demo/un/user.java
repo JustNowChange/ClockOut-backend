@@ -6,8 +6,11 @@ import lombok.Data;
 @Data
 public class user {
     int id;
+    String name;
     String username;
     String password;
+    int status;
+
 
 
 }
