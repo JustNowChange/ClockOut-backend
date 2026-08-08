@@ -14,6 +14,19 @@ spring:
   sql:
     init:
       continue-on-error: true
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    database: 0
+    timeout: 3000ms
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 0
+        max-wait: -1ms
+
 upload:
   local-path: ${UPLOAD_LOCAL_PATH}
   access-prefix: /image/
@@ -25,9 +38,20 @@ management:
         include: health
 sky:
   jwt:
-    secret-key: MicroDev123456789abcdef12345678abcdxyz
+    # 安全要求：JWT 密钥必须通过环境变量注入，禁止硬编码
+    secret-key: ${JWT_SECRET_KEY}
     ttl: 86400000
     token-name: token
+
+# Resume缓存配置
+resume:
+  cache:
+    # 是否启用Redis缓存(本地没有Redis时设为false)
+    enabled: ${RESUME_CACHE_ENABLED:true}
+    # 列表缓存过期时间(秒)
+    list-ttl: 60
+    # 详情缓存过期时间(秒)
+    detail-ttl: 300
 
 
 mybatis:

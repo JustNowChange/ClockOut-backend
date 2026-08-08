@@ -1,6 +1,7 @@
 package com.example.demo.config;
 
 import com.example.demo.interceptor.JWTtoken;
+import com.example.demo.interceptor.RateLimitInterceptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
@@ -18,6 +19,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
     private UploadProperties uploadProperties;
     @Autowired
     private JWTtoken jwT;
+    @Autowired
+    private RateLimitInterceptor rateLimitInterceptor;
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
@@ -37,9 +40,19 @@ public class WebMvcConfig implements WebMvcConfigurer {
      * @param registry
      */
     public void addInterceptors(InterceptorRegistry registry) {
+        // JWT 认证拦截器
         registry.addInterceptor(jwT)
                 .addPathPatterns("/api/**")
-                .excludePathPatterns("/api/auth/login", "/image/**");
+                .excludePathPatterns(
+                        "/api/auth/login",
+                        "/api/auth/register",
+                        "/image/**"
+                );
+
+        // 限流拦截器：所有 /api/** 接口均受限流保护，按用户或IP计数
+        registry.addInterceptor(rateLimitInterceptor)
+                .addPathPatterns("/api/**")
+                .excludePathPatterns("/image/**");
 
      }
 
