@@ -11,6 +11,8 @@ spring:
     multipart:
       max-file-size: 10MB
       max-request-size: 20MB
+  profiles:
+    active: dev
   sql:
     init:
       continue-on-error: true
@@ -27,9 +29,6 @@ spring:
         min-idle: 0
         max-wait: -1ms
 
-upload:
-  local-path: ${UPLOAD_LOCAL_PATH}
-  access-prefix: /image/
 
 management:
   endpoints:

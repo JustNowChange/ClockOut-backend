@@ -9,13 +9,10 @@ public class CorsConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-                // 允许所有域名访问
-                .allowedOrigins("*")
-                // 精准填写当前前端完整域名
-                .allowedOrigins("https://clockout.pages.dev")
-//                .allowedOrigins("http://localhost:5173") // 本地前端地址
+                // 安全限制：仅允许指定前端域名，禁止使用 "*" 避免任意来源访问
+                .allowedOrigins("http://localhost:5173") // 本地前端地址
                 // 必须放行OPTIONS预检
-                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
                 .allowCredentials(true)
                 .maxAge(3600);
     }
