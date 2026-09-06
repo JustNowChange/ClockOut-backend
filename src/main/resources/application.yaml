@@ -39,8 +39,11 @@ sky:
   jwt:
     # 安全要求：JWT 密钥必须通过环境变量注入，禁止硬编码
     secret-key: ${JWT_SECRET_KEY}
-    ttl: 86400000
+    # 访问令牌过期时间(30min)
+    ttl: 1800000
     token-name: token
+    # 刷新令牌过期时间(7天)
+    refresh-ttl: ${JWT_REFRESH-TTL}
 
 # Resume缓存配置
 resume:

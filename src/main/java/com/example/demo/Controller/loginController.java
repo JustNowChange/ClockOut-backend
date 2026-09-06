@@ -9,10 +9,12 @@ import com.example.demo.service.UserService;
 import com.example.demo.un.user;
 import com.example.demo.utils.JWTutil;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -22,6 +24,11 @@ public class loginController {
     private UserService userService;
     @Autowired
     private JwtProperties jwtProperties;
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
+
+    // 刷新令牌在Redis中的key前缀
+    private static final String REFRESH_TOKEN_KEY_PREFIX = "refresh:login:";
 
     /**
      * 登录
@@ -38,16 +45,36 @@ public class loginController {
             return Result.error("用户名或密码错误");
         }
 
+        // 访问令牌(短期): 必须带 tokenType=access, 拦截器校验此标记才放行
         Map<String, Object> claims = new HashMap<>();
         claims.put(JwtClaimsConstant.EMP_ID, user.getId());
+        claims.put(JwtClaimsConstant.TOKEN_TYPE, JwtClaimsConstant.ACCESS_TOKEN);
         String token = JWTutil.createJWT(
                 jwtProperties.getSecretKey(),
                 jwtProperties.getTtl(),
                 claims);
+
+        // 刷新令牌(长期): tokenType=refresh, 仅用于 /refresh 换新token
+        Map<String, Object> refreshClaims = new HashMap<>();
+        refreshClaims.put(JwtClaimsConstant.EMP_ID, user.getId());
+        refreshClaims.put(JwtClaimsConstant.TOKEN_TYPE, JwtClaimsConstant.REFRESH_TOKEN);
+        String refreshToken = JWTutil.createJWT(
+                jwtProperties.getSecretKey(),
+                jwtProperties.getRefreshTtl(),
+                refreshClaims);
+
+        // 刷新令牌写入Redis, TTL与刷新令牌有效期一致; 刷新轮转时覆盖
+        stringRedisTemplate.opsForValue().set(
+                REFRESH_TOKEN_KEY_PREFIX + user.getId(),
+                refreshToken,
+                jwtProperties.getRefreshTtl(),
+                TimeUnit.MILLISECONDS);
+
         userVO employeeLoginVO = userVO.builder()
                 .id(user.getId())
                 .username(employee.getUsername())
                 .token(token)
+                .refreshToken(refreshToken)
                 .build();
 
         return Result.success(employeeLoginVO);

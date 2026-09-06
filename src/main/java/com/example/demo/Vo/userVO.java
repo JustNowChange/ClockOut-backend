@@ -15,6 +15,7 @@ public class userVO {
     private String username;
     private String password;
     private String token;
+    private String refreshToken;
     private int status;
 
 }

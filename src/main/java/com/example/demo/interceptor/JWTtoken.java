@@ -32,6 +32,11 @@ public class JWTtoken implements HandlerInterceptor {
         //2、校验令牌
         try {
             Claims claims = JWTutil.parseJWT(jwtProperties.getSecretKey(), token);
+            // 双token: 业务接口只接受访问令牌, 刷新令牌一律401
+            if (!JwtClaimsConstant.ACCESS_TOKEN.equals(claims.get(JwtClaimsConstant.TOKEN_TYPE))) {
+                response.setStatus(401);
+                return false;
+            }
             Long empId = Long.valueOf(claims.get(JwtClaimsConstant.EMP_ID).toString());
             BaseContext.setCurrentId(empId);
             //3、通过，放行
