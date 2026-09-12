@@ -35,10 +35,10 @@ public class ResumeController {
     }
 
     /**
-     * TODO api没做 这里直接发送单个数据,其他的数据会默认空,不知道前端做保存没有
+     * TODO !! 此处是put请求上线前改为post
      * 2. 更新自己简历的核心信息
      * PUT /api/resume
-     * 需要登录
+     *
      */
     @PutMapping
     public Result<ResumeDetailVO.CoreInfo> updateCore(@RequestBody ResumeCoreUpdateRequest req) {
@@ -98,6 +98,7 @@ public class ResumeController {
     }
 
     /**
+     * TODO !! 此处是put请求上线前改为post
      * 6. 更新模块(标题+content)
      * PUT /api/resume/module/{id}
      * 需要登录

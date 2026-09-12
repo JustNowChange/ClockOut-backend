@@ -7,13 +7,18 @@ import com.example.demo.context.BaseContext;
 import com.example.demo.properties.JwtProperties;
 import com.example.demo.utils.JWTutil;
 import io.jsonwebtoken.Claims;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -24,6 +29,7 @@ import java.util.concurrent.TimeUnit;
  * 若发现"签名合法但已不在Redis中"的刷新令牌被重复使用,
  * 判定为令牌泄露, 清除该用户全部登录态, 强制重新登录
  */
+@Slf4j
 @RestController
 @RequestMapping("/api/auth")
 public class RefreshToken {
@@ -37,8 +43,18 @@ public class RefreshToken {
     private static final String REFRESH_TOKEN_KEY_PREFIX = "refresh:login:";
 
 @PostMapping("/refresh")
-public Result<userVO> refresh(@RequestBody Map<String, String> body) {
-    String refreshToken = body.get("refreshToken");
+public Result<userVO> refresh(HttpServletRequest request, HttpServletResponse response) {
+    // 方案2: 从httpOnly Cookie中取刷新令牌(不再走JSON请求体)
+    String refreshToken = null;
+    Cookie[] cookies = request.getCookies();
+    if (cookies != null) {
+        for (Cookie item : cookies) {
+            if ("refreshToken".equals(item.getName())) {
+                refreshToken = item.getValue();
+                break;
+            }
+        }
+    }
 
     // 1、缺失
     if (refreshToken == null || refreshToken.trim().isEmpty()) {
@@ -75,23 +91,43 @@ public Result<userVO> refresh(@RequestBody Map<String, String> body) {
 
     // 5、通过: 轮转签发新双token(旧刷新令牌被Redis覆盖, 立即作废)
     Map<String, String> tokenPair = buildTokenPair(empId);
+
+    // 新刷新令牌通过httpOnly Cookie下发(轮转), 响应体只带新访问令牌
+    ResponseCookie newCookie = ResponseCookie.from("refreshToken", tokenPair.get("refreshToken"))
+            .httpOnly(true)
+            .secure(false)   // 本地http调试用; 生产HTTPS环境改为true
+            .sameSite("Strict")
+            .path("/api/auth")
+            .maxAge(jwtProperties.getRefreshTtl() / 1000)
+            .build();
+    response.addHeader(HttpHeaders.SET_COOKIE, newCookie.toString());
+    log.info("[刷新] step7 轮转完成: 新access已返回, 新refresh已写Redis+Cookie, 旧refresh作废");
+
     userVO vo = userVO.builder()
             .id(empId.intValue())
             .token(tokenPair.get("accessToken"))
-            .refreshToken(tokenPair.get("refreshToken"))
             .build();
     return Result.success(vo);
 }
 
 /**
- * 退出登录: 删除Redis中的刷新令牌(访问令牌等其自然过期)
+ * 退出登录: 删除Redis中的刷新令牌(访问令牌等其自然过期), 并让浏览器立即删除Cookie
  */
 @PostMapping("/logout")
-public Result<String> logout() {
+public Result<String> logout(HttpServletResponse response) {
     Long empId = BaseContext.getCurrentId();
     if (empId != null) {
         stringRedisTemplate.delete(REFRESH_TOKEN_KEY_PREFIX + empId);
     }
+    // maxAge=0 让浏览器立即删除刷新令牌Cookie
+    ResponseCookie cleared = ResponseCookie.from("refreshToken", "")
+            .httpOnly(true)
+            .secure(false) //
+            .sameSite("Strict")
+            .path("/api/auth")
+            .maxAge(0)
+            .build();
+    response.addHeader(HttpHeaders.SET_COOKIE, cleared.toString());
     return Result.success("退出成功");
 }
 
