@@ -1,5 +1,6 @@
 package com.example.demo.config;
 
+import com.example.demo.interceptor.AdminInterceptor;
 import com.example.demo.interceptor.JWTtoken;
 import com.example.demo.interceptor.RateLimitInterceptor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +18,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
     private JWTtoken jwT;
     @Autowired
     private RateLimitInterceptor rateLimitInterceptor;
+    @Autowired
+    private AdminInterceptor adminInterceptor;
 
 
     /**
@@ -39,6 +42,11 @@ public class WebMvcConfig implements WebMvcConfigurer {
         registry.addInterceptor(rateLimitInterceptor)
                 .addPathPatterns("/api/**")
                 .excludePathPatterns("/image/**");
+
+        // 管理员角色拦截器：仅放行 user.status=2 的用户
+        // 注册顺序在 JWT 之后，可直接从 BaseContext 取当前登录用户ID
+        registry.addInterceptor(adminInterceptor)
+                .addPathPatterns("/api/admin/**");
 
      }
 

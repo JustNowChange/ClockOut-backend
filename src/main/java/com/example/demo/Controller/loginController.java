@@ -11,13 +11,11 @@ import com.example.demo.utils.JWTutil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.ResponseCookie;
 import org.springframework.web.bind.annotation.*;
 
-import javax.servlet.http.HttpServletResponse;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -32,7 +30,7 @@ public class loginController {
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
 
-    // 刷新令牌在Redis中的key前缀
+    // 刷新令牌在Redis中的key前缀, 完整key为 refresh:login:{userId}:{jti}
     private static final String REFRESH_TOKEN_KEY_PREFIX = "refresh:login:";
 
     /**
@@ -41,7 +39,7 @@ public class loginController {
      * @return
      */
     @PostMapping("/login")
-    public Result<userVO> login(@RequestBody userRequest employee, HttpServletResponse response) {
+    public Result<userVO> login(@RequestBody userRequest employee) {
 
         System.out.println("登录");
 
@@ -64,40 +62,36 @@ public class loginController {
                 claims);
 
         // 刷新令牌(长期): tokenType=refresh, 仅用于 /refresh 换新token
+        // jti: 本次会话(本标签页)唯一编号, 同一用户多标签并行时各持一条独立Redis记录
+        String jti = UUID.randomUUID().toString().replace("-", "");
         Map<String, Object> refreshClaims = new HashMap<>();
 
         refreshClaims.put(JwtClaimsConstant.EMP_ID, user.getId());
 
         refreshClaims.put(JwtClaimsConstant.TOKEN_TYPE, JwtClaimsConstant.REFRESH_TOKEN);
 
+        refreshClaims.put(JwtClaimsConstant.JTI, jti);
+
         String refreshToken = JWTutil.createJWT(
                 jwtProperties.getSecretKey(),
                 jwtProperties.getRefreshTtl(),
                 refreshClaims);
-        log.info("[登录] step4 refresh签发完成(7天): {}...", refreshToken.substring(0, Math.min(20, refreshToken.length())));
+        log.info("[登录] step4 refresh签发完成(7天), jti={}...", jti.substring(0, Math.min(8, jti.length())));
 
-        // 刷新令牌写入Redis, TTL与刷新令牌有效期一致; 刷新轮转时覆盖
+        // 刷新令牌写入Redis: 按 用户ID+jti 存储, 多标签/多端互不覆盖; TTL与刷新令牌一致
         stringRedisTemplate.opsForValue().set(
-                REFRESH_TOKEN_KEY_PREFIX + user.getId(),
+                REFRESH_TOKEN_KEY_PREFIX + user.getId() + ":" + jti,
                 refreshToken,
                 jwtProperties.getRefreshTtl(),
                 TimeUnit.MILLISECONDS);
 
-        // 方案2: 刷新令牌通过httpOnly Cookie下发, 不进JSON响应体(JS无法读取, 防XSS窃取)
-        ResponseCookie cookie = ResponseCookie.from("refreshToken", refreshToken)
-                .httpOnly(true)
-                .secure(false)   //TODO 本地http调试用; 生产HTTPS环境改为true
-                .sameSite("Strict")
-                .path("/api/auth")   // 仅认证相关接口携带
-                .maxAge(jwtProperties.getRefreshTtl() / 1000)   // 与刷新令牌有效期一致(秒)
-                .build();
-        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
-        log.info("[登录] step6 refresh已通过httpOnly Cookie下发");
-
+        // 刷新令牌直接放入响应体, 前端存入标签页级 sessionStorage（支持同浏览器多账号并行）
         userVO employeeLoginVO = userVO.builder()
                 .id(user.getId())
                 .username(employee.getUsername())
                 .token(token)
+                .refreshToken(refreshToken)
+                .status(user.getStatus())  // 角色：1-普通用户 2-管理员，前端据此分流
                 .build();
 
         log.info("[登录] step7 登录成功: empId={}, username={}", user.getId(), employee.getUsername());
