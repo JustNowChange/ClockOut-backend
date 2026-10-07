@@ -5,34 +5,27 @@ import com.example.demo.Vo.userVO;
 import com.example.demo.constant.JwtClaimsConstant;
 import com.example.demo.properties.JwtProperties;
 import com.example.demo.utils.JWTutil;
+import com.example.demo.utils.UserCacheUtils;
 import io.jsonwebtoken.Claims;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.Cursor;
-import org.springframework.data.redis.core.ScanOptions;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.servlet.http.HttpServletRequest;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 /**
  * 刷新令牌: 访问令牌过期后, 前端携带刷新令牌换取新的双token
  *
- * 多会话并行模型(同浏览器多标签页可登录不同账号):
- * - 刷新令牌不再走 httpOnly Cookie, 由前端放在请求头 RefreshToken 中携带
- * - Redis 按 refresh:login:{userId}:{jti} 为每个标签页会话存一条独立记录
- *
- * 安全策略(轮转): 每次刷新签发全新刷新令牌(新jti), 旧令牌立即作废;
- * 若发现"签名合法但已不在Redis中"的刷新令牌被重复使用,
- * 判定为令牌泄露, 清除该用户全部会话, 强制重新登录
+ * 真轮换(Refresh Token Rotation): 每次刷新jti换代, 旧双token立即失效;
+ * 轮换由Lua脚本原子完成(校验旧jti + ban快照判定 + 换新jti, 保持会话剩余TTL),
+ * 整个refresh仅1次Redis访问, 不查数据库。
+ * 会话TTL=刷新令牌有效期(7天绝对有效期, 不随刷新续期), 到期强制重新登录。
  */
 @Slf4j
 @RestController
@@ -42,12 +35,10 @@ public class RefreshToken {
     @Autowired
     private JwtProperties jwtProperties;
     @Autowired
-    private StringRedisTemplate stringRedisTemplate;
+    private UserCacheUtils userCacheUtils;
 
     // 前端回传刷新令牌所用的请求头名称
     private static final String REFRESH_TOKEN_HEADER = "RefreshToken";
-    // 刷新令牌在Redis中的key前缀, 完整key为 refresh:login:{userId}:{jti}
-    private static final String REFRESH_TOKEN_KEY_PREFIX = "refresh:login:";
 
     @PostMapping("/refresh")
     public Result<userVO> refresh(HttpServletRequest request) {
@@ -57,7 +48,7 @@ public class RefreshToken {
             return Result.error("刷新令牌缺失, 请重新登录");
         }
 
-        // 2、验签 + 过期校验 + 取出 empId / jti
+        // 2、验签 + 过期校验 + 取出 uid/旧jti
         Claims claims;
         try {
             claims = JWTutil.parseJWT(jwtProperties.getSecretKey(), refreshToken);
@@ -70,35 +61,42 @@ public class RefreshToken {
             return Result.error("令牌类型错误, 请重新登录");
         }
 
-        Long empId = Long.valueOf(claims.get(JwtClaimsConstant.EMP_ID).toString());
-        String jti = claims.get(JwtClaimsConstant.JTI) == null ? null : claims.get(JwtClaimsConstant.JTI).toString();
-        if (jti == null || jti.isEmpty()) {
-            return Result.error("刷新令牌缺少会话标识, 请重新登录");
-        }
-
-        String redisKey = REFRESH_TOKEN_KEY_PREFIX + empId + ":" + jti;
-        String stored = stringRedisTemplate.opsForValue().get(redisKey);
-
-        // 4、与Redis比对
-        if (stored == null) {
-            // 无记录: 已过期/已登出/已被轮转, 或旧令牌被重复使用
+        Long uid = Long.valueOf(claims.get(JwtClaimsConstant.UID).toString());
+        String oldJti = (String) claims.get(JwtClaimsConstant.JTI);
+        if (oldJti == null || oldJti.isEmpty()) {
             return Result.error("登录状态已失效, 请重新登录");
         }
-        if (!stored.equals(refreshToken)) {
-            // 签名合法但与服务端记录不一致: 旧刷新令牌被重用 -> 疑似泄露, 清除该用户全部会话
-            deleteAllUserSessions(empId);
-            return Result.error("检测到登录状态异常, 请重新登录");
+
+        // 4、原子轮换: 旧jti校验 + ban快照判定(0次查库) + 换新jti, 保持会话剩余TTL
+        String newJti = UUID.randomUUID().toString().replace("-", "");
+        List<String> result = userCacheUtils.rotateSession(
+                uid, oldJti, newJti, System.currentTimeMillis());
+        String code = (result == null || result.isEmpty())
+                ? UserCacheUtils.ROTATE_INVALID : result.get(0);
+
+        // 5、按轮换结果分流
+        switch (code) {
+            case UserCacheUtils.ROTATE_BANNED:
+                String reason = result.size() > 1 ? result.get(1) : "";
+                log.warn("[刷新] uid={} 封禁中, 拒绝续期", uid);
+                return Result.error("账号已被封禁: " + reason);
+            case UserCacheUtils.ROTATE_INVALID:
+                // 旧jti与服务端不一致: token已被上一次刷新换代/登出/被踢, 旧token重放拒绝
+                log.warn("[刷新] uid={} jti已失效(旧token重放), 拒绝续期", uid);
+                return Result.error("登录状态已失效, 请重新登录");
+            case UserCacheUtils.ROTATE_OK:
+                break;
+            default:
+                return Result.error("登录状态已失效, 请重新登录");
         }
 
-        // 5、通过: 轮转签发新双token
-        // 旧jti记录立即删除, 新刷新令牌使用新jti独立存储(只影响当前标签页会话)
-        stringRedisTemplate.delete(redisKey);
-        Map<String, String> tokenPair = buildTokenPair(empId);
+        // 6、通过: 用新jti签发双token, 旧双token在Lua轮换完成时已全部失效
+        Map<String, String> tokenPair = buildTokenPair(uid, newJti);
 
-        log.info("[刷新] empId={}, jti={} -> 新jti, 轮转完成(仅当前会话)", empId, jti.substring(0, Math.min(8, jti.length())));
+        log.info("[刷新] uid={} 轮换完成, jti已换代, 旧token全部失效", uid);
 
         userVO vo = userVO.builder()
-                .id(empId.intValue())
+                .id(uid)
                 .token(tokenPair.get("accessToken"))
                 .refreshToken(tokenPair.get("refreshToken"))
                 .build();
@@ -106,8 +104,7 @@ public class RefreshToken {
     }
 
     /**
-     * 退出登录: 只删除当前标签页这一条刷新令牌记录(按jti), 不影响同账号其它标签页;
-     * 访问令牌等其自然过期。
+     * 退出登录: 删除 auth:user:{uid} 整key, 双token立即失效
      */
     @PostMapping("/logout")
     public Result<String> logout(HttpServletRequest request) {
@@ -115,71 +112,39 @@ public class RefreshToken {
         if (refreshToken != null && !refreshToken.trim().isEmpty()) {
             try {
                 Claims claims = JWTutil.parseJWT(jwtProperties.getSecretKey(), refreshToken);
-                Long empId = Long.valueOf(claims.get(JwtClaimsConstant.EMP_ID).toString());
-                Object jtiObj = claims.get(JwtClaimsConstant.JTI);
-                if (jtiObj != null) {
-                    stringRedisTemplate.delete(REFRESH_TOKEN_KEY_PREFIX + empId + ":" + jtiObj);
-                    log.info("[登出] 已删除会话记录: empId={}, jti={}", empId, jtiObj);
-                }
+                Long uid = Long.valueOf(claims.get(JwtClaimsConstant.UID).toString());
+                userCacheUtils.deleteAuthState(uid);
+                log.info("[登出] uid={} 鉴权状态已删除", uid);
             } catch (Exception e) {
-                // 刷新令牌无效/过期: 本就无需删除, 不阻塞登出
-                log.warn("[登出] 刷新令牌解析失败(忽略): {}", e.getMessage());
+                // 令牌无效也视为登出成功(幂等), 前端清本地token即可
             }
         }
         return Result.success("退出成功");
     }
 
     /**
-     * 签发双token并将刷新令牌(带jti)写入Redis, 每个会话一条独立记录
+     * 签发双token: access与refresh携带同一jti, 对应 auth:user:{uid} 中的同一会话
      */
-    private Map<String, String> buildTokenPair(long userId) {
+    private Map<String, String> buildTokenPair(long uid, String jti) {
         // 访问令牌(短期)
         Map<String, Object> accessClaims = new HashMap<>();
-        accessClaims.put(JwtClaimsConstant.EMP_ID, userId);
+        accessClaims.put(JwtClaimsConstant.UID, uid);
         accessClaims.put(JwtClaimsConstant.TOKEN_TYPE, JwtClaimsConstant.ACCESS_TOKEN);
+        accessClaims.put(JwtClaimsConstant.JTI, jti);
         String accessToken = JWTutil.createJWT(
                 jwtProperties.getSecretKey(), jwtProperties.getTtl(), accessClaims);
 
-        // 刷新令牌(长期), 携带新的唯一jti
-        String jti = UUID.randomUUID().toString().replace("-", "");
+        // 刷新令牌(长期), 同一jti
         Map<String, Object> refreshClaims = new HashMap<>();
-        refreshClaims.put(JwtClaimsConstant.EMP_ID, userId);
+        refreshClaims.put(JwtClaimsConstant.UID, uid);
         refreshClaims.put(JwtClaimsConstant.TOKEN_TYPE, JwtClaimsConstant.REFRESH_TOKEN);
         refreshClaims.put(JwtClaimsConstant.JTI, jti);
         String refreshToken = JWTutil.createJWT(
                 jwtProperties.getSecretKey(), jwtProperties.getRefreshTtl(), refreshClaims);
 
-        // 按 用户ID+jti 独立存储, 同账号多标签各一条, 轮转互不覆盖
-        stringRedisTemplate.opsForValue().set(
-                REFRESH_TOKEN_KEY_PREFIX + userId + ":" + jti,
-                refreshToken,
-                jwtProperties.getRefreshTtl(),
-                TimeUnit.MILLISECONDS);
-
         Map<String, String> pair = new HashMap<>();
         pair.put("accessToken", accessToken);
         pair.put("refreshToken", refreshToken);
         return pair;
-    }
-
-    /**
-     * 删除某用户的全部刷新会话(令牌重用/疑似泄露时调用)。
-     * 使用 SCAN 游标遍历 refresh:login:{userId}:* , 避免 KEYS 阻塞 Redis。
-     */
-    private void deleteAllUserSessions(Long userId) {
-        String pattern = REFRESH_TOKEN_KEY_PREFIX + userId + ":*";
-        Set<String> keys = new HashSet<>();
-        ScanOptions options = ScanOptions.scanOptions().match(pattern).count(100).build();
-        try (Cursor<String> cursor = stringRedisTemplate.scan(options)) {
-            while (cursor.hasNext()) {
-                keys.add(cursor.next());
-            }
-        } catch (Exception e) {
-            log.error("[刷新] SCAN 用户会话失败: empId={}", userId, e);
-        }
-        if (!keys.isEmpty()) {
-            stringRedisTemplate.delete(keys);
-            log.warn("[刷新] 疑似令牌泄露, 已清除用户全部会话: empId={}, 共{}条", userId, keys.size());
-        }
     }
 }

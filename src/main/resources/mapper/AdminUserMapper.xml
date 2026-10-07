@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.example.demo.mapper.AdminUserMapper">
+
+    <!-- ============================================================
+         管理端用户管理动态 SQL（独立于 UserMapper.xml）
+         ============================================================ -->
+
+    <!-- 生效中的封禁行: 任意一条未手动解封且生效(永久/临时未到期)的记录即可; 同uid可能多行, 统计时DISTINCT -->
+    <sql id="adminEffectiveBanRows">
+        SELECT ub.uid, ub.ban_type
+        FROM user_ban ub
+        WHERE ub.revoke_time IS NULL
+            AND (ub.ban_type = 2
+                 OR (ub.ban_type = 1 AND ub.ban_end <![CDATA[>]]> NOW()))
+    </sql>
+
+    <!-- 用户列表通用筛选条件: keyword模糊 / banType封禁筛选 / online在线筛选 -->
+    <sql id="adminUserConditions">
+        <if test="keyword != null and keyword != ''">
+            AND (ua.username LIKE CONCAT('%', #{keyword}, '%')
+                 OR ua.name LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        <if test="banType != null">
+            <choose>
+                <when test="banType == 0">
+                    AND ua.uid NOT IN (
+                        SELECT eb.uid FROM (<include refid="adminEffectiveBanRows"/>) eb
+                    )
+                </when>
+                <otherwise>
+                    AND ua.uid IN (
+                        SELECT eb.uid FROM (<include refid="adminEffectiveBanRows"/>) eb
+                        WHERE eb.ban_type = #{banType}
+                    )
+                </otherwise>
+            </choose>
+        </if>
+        <if test="online != null and online == 1">
+            <choose>
+                <when test="onlineUids != null and onlineUids.size() > 0">
+                    AND ua.uid IN
+                    <foreach collection="onlineUids" item="ouid" open="(" separator="," close=")">
+                        #{ouid}
+                    </foreach>
+                </when>
+                <otherwise>
+                    AND 1 = 0
+                </otherwise>
+            </choose>
+        </if>
+        <if test="online != null and online == 0 and onlineUids != null and onlineUids.size() > 0">
+            AND ua.uid NOT IN
+            <foreach collection="onlineUids" item="ouid" open="(" separator="," close=")">
+                #{ouid}
+            </foreach>
+        </if>
+    </sql>
+
+    <!-- 用户总数(排除软删除) -->
+    <select id="adminCountAllUsers" resultType="long">
+        SELECT COUNT(*) FROM user_account WHERE is_delete = 0
+    </select>
+
+    <!-- 今日新增用户数 -->
+    <select id="adminCountTodayNewUsers" resultType="long">
+        SELECT COUNT(*) FROM user_account
+        WHERE is_delete = 0 AND register_time <![CDATA[>=]]> CURDATE()
+    </select>
+
+    <!-- 封禁中用户数: 同uid多条生效记录只算一个 -->
+    <select id="adminCountBannedUsers" resultType="long">
+        SELECT COUNT(DISTINCT eb.uid) FROM (
+            <include refid="adminEffectiveBanRows"/>
+        ) eb
+    </select>
+
+    <!-- 按条件统计用户数 -->
+    <select id="adminCountUsers" resultType="long">
+        SELECT COUNT(*) FROM user_account ua
+        WHERE ua.is_delete = 0
+        <include refid="adminUserConditions"/>
+    </select>
+
+    <!-- 按条件分页查询用户 -->
+    <select id="adminPageUsers" resultType="UserAccount">
+        SELECT ua.* FROM user_account ua
+        WHERE ua.is_delete = 0
+        <include refid="adminUserConditions"/>
+        ORDER BY ua.uid DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <!-- 查全部生效中的封禁记录(含完整字段, 用于列表ban信息装配); id倒序, 同uid多条时Java侧保留最新一条 -->
+    <select id="adminListEffectiveBans" resultType="UserBan">
+        SELECT ub.* FROM user_ban ub
+        WHERE ub.revoke_time IS NULL
+            AND (ub.ban_type = 2 OR (ub.ban_type = 1 AND ub.ban_end <![CDATA[>]]> NOW()))
+        ORDER BY ub.id DESC
+    </select>
+
+    <!-- 插入封禁记录 -->
+    <insert id="adminInsertBan" parameterType="UserBan" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO user_ban (uid, ban_type, ban_start, ban_end, ban_reason, operator_uid)
+        VALUES (#{uid}, #{banType}, #{banStart}, #{banEnd}, #{banReason}, #{operatorUid})
+    </insert>
+
+    <!-- 解封: 一次性解除该uid全部未解封记录(历史多次封禁可能残留多条, 只解最新一条会导致旧记录永远残留) -->
+    <update id="adminRevokeLatestBan">
+        UPDATE user_ban
+        SET revoke_time = NOW(), revoke_operator = #{operatorUid}
+        WHERE uid = #{uid} AND revoke_time IS NULL
+    </update>
+</mapper>

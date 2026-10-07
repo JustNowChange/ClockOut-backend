@@ -10,12 +10,14 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class userVO {
-    private int id;
+    /** 用户uid(对外字段名保持id, 兼容前端) */
+    private Long id;
+    /** 昵称 */
     private String name;
     private String username;
-    private String password;
+    private String email;
+    /** 访问令牌(短期) */
     private String token;
+    /** 刷新令牌(长期) */
     private String refreshToken;
-    private int status;
-
 }

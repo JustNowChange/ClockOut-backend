@@ -3,14 +3,15 @@ package com.example.demo.interceptor;
 import com.example.demo.constant.JwtClaimsConstant;
 import com.example.demo.context.BaseContext;
 import com.example.demo.properties.JwtProperties;
+import com.example.demo.un.AuthUserState;
 import com.example.demo.utils.JWTutil;
+import com.example.demo.utils.UserCacheUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
 import io.jsonwebtoken.Claims;
-import javax.net.ssl.HandshakeCompletedListener;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
@@ -19,6 +20,8 @@ import javax.servlet.http.HttpServletResponse;
 public class JWTtoken implements HandlerInterceptor {
     @Autowired
     private JwtProperties jwtProperties;
+    @Autowired
+    private UserCacheUtils userCacheUtils;
 
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
 
@@ -43,9 +46,28 @@ public class JWTtoken implements HandlerInterceptor {
                 response.setStatus(401);
                 return false;
             }
-            Long empId = Long.valueOf(claims.get(JwtClaimsConstant.EMP_ID).toString());
-            BaseContext.setCurrentId(empId);
-            log.info("[JWT拦截] {} | 校验通过, empId={}", uri, empId);
+            Long uid = Long.valueOf(claims.get(JwtClaimsConstant.UID).toString());
+            String jti = (String) claims.get(JwtClaimsConstant.JTI);
+
+            // 一次GET取回完整JSON(会话+封禁), 原两次Redis RTT合并为一次
+            AuthUserState state = userCacheUtils.getAuthState(uid);
+
+            // 会话白名单: JSON不存在/session不匹配token的jti = 登出/被踢/旧token
+            if (jti == null || jti.isEmpty()
+                    || state == null || state.getSession() == null
+                    || !jti.equals(state.getSession().getJti())) {
+                log.warn("[JWT拦截] {} | uid={} 会话不存在或jti不匹配(登出/被踢/旧token), 拒绝", uri, uid);
+                response.setStatus(401);
+                response.setContentType("application/json;charset=UTF-8");
+                response.getWriter().write("{\"code\":0,\"msg\":\"登录状态已失效, 请重新登录\",\"data\":null}");
+                return false;
+            }
+
+            // 把完整状态递给BanInterceptor, 其无需再访问Redis
+            request.setAttribute(BanInterceptor.ATTR_AUTH_STATE, state);
+
+            BaseContext.setCurrentId(uid);
+            log.info("[JWT拦截] {} | 校验通过, uid={}", uri, uid);
             //3、通过，放行
             return true;
         } catch (Exception ex) {
@@ -54,5 +76,14 @@ public class JWTtoken implements HandlerInterceptor {
             response.setStatus(401);
             return false;
         }
+    }
+
+    /**
+     * 请求结束清理ThreadLocal, 防止Tomcat线程复用导致uid残留串号
+     */
+    @Override
+    public void afterCompletion(HttpServletRequest request, HttpServletResponse response,
+                                Object handler, Exception ex) {
+        BaseContext.removeCurrentId();
     }
 }

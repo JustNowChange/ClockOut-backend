@@ -2,7 +2,8 @@ package com.example.demo.constant;
 
 public class JwtClaimsConstant {
 
-    public static final String EMP_ID = "empId";
+    // 用户uid: 对应 user_account.uid
+    public static final String UID = "uid";
 
     // 刷新令牌唯一编号：每个标签页/每次登录不同，用于多会话并行（Redis 按 jti 分记录）
     public static final String JTI = "jti";

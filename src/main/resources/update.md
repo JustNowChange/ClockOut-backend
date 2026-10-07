@@ -1,2 +1,0 @@
-此次更改是因为同页面无法登录多账户,因为前端token存于localStorage,导致b账户登录后,a就被覆盖,后续a刷新的时候就会拿b的去刷
-改动:前端存于sessionStorage,但是会出现xss安全,就加上JTI重用检测,登录签发 refresh token 时,往令牌里塞一个每次都不同的随机编号,这样即便cookie泄漏也无法做的有效攻击(还有就是redis里的,随此次更新而更新)

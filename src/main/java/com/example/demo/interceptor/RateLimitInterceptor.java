@@ -12,6 +12,7 @@ import javax.servlet.http.HttpServletResponse;
 import java.util.concurrent.TimeUnit;
 
 /**
+ * TODO 检查安全漏洞
  * 接口限流拦截器（基于 Redis 计数）
  * 策略：按"用户ID或IP"做维度，限制单位时间内的请求数
  * 例如：每分钟最多 60 次请求
@@ -64,19 +65,12 @@ public class RateLimitInterceptor implements HandlerInterceptor {
         return true;
     }
 
-    /** 获取客户端真实 IP（兼容代理） */
+    /**
+     * 获取客户端真实IP
+     * RemoteIpValve 已在Tomcat底层处理可信代理头, getRemoteAddr()即为真实客户端IP,
+     * 攻击者无法通过每请求更换XFF绕过IP维度限流
+     */
     private String getClientIp(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("X-Real-IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr();
-        }
-        // X-Forwarded-For 可能包含多个 IP，取第一个
-        if (ip != null && ip.contains(",")) {
-            ip = ip.split(",")[0].trim();
-        }
-        return ip != null ? ip : "unknown";
+        return request.getRemoteAddr();
     }
 }

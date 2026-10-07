@@ -40,6 +40,7 @@ public class ResumeServiceImpl implements ResumeService {
     private static final String DEFAULT_CONTENT = "[]";
 
     // 字段长度限制
+    //TODO 后续看需求是否外包
     private static final int MAX_NAME = 50;
     private static final int MAX_TITLE = 100;
     private static final int MAX_PHONE = 30;
@@ -50,6 +51,7 @@ public class ResumeServiceImpl implements ResumeService {
     private static final int MAX_MODULE_TITLE = 50;
 
     // 格式校验正则
+    // 预编译正则 `Pattern.compile()` 编译正则表达式是比较耗 CPU的操作。
     private static final Pattern PATTERN_PHONE = Pattern.compile("^1[3-9]\\d{9}$");
     private static final Pattern PATTERN_PHONE_FLEX = Pattern.compile("^1[3-9]\\d{1}-?\\d{4}-?\\d{4}$");
     private static final Pattern PATTERN_EMAIL = Pattern.compile("^[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}$");
@@ -68,17 +70,26 @@ public class ResumeServiceImpl implements ResumeService {
 
     // ================= 字段校验+XSS转义 =================
 
+    //功能类
     private String checkAndSanitize(String value, String fieldName, int maxLength) {
-        if (value == null) return "";
+        if (value == null){
+            return "";
+        }
+
         if (value.length() > maxLength) {
             throw new RuntimeException(fieldName + " 长度不能超过 " + maxLength + " 个字符");
         }
+
         return SecurityUtils.sanitizeText(value);
     }
 
     private void validatePhone(String phone) {
-        if (phone == null || phone.isEmpty()) return;
+        if (phone == null || phone.isEmpty()) {
+            return;
+        }
+
         String digitsOnly = phone.replaceAll("[\\s-]", "");
+
         if (!PATTERN_PHONE.matcher(digitsOnly).matches()) {
             throw new RuntimeException("手机号格式不正确，请输入有效的11位手机号");
         }

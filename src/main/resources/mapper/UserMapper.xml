@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.example.demo.mapper.UserMapper">
+
+    <!-- 通用更新: 按uid更新user_account中非null字段, 传什么改什么; <set>自动去掉多余逗号 -->
+    <update id="CommoUpdateUser" parameterType="com.example.demo.un.UserAccount">
+        update user_account
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="email != null">email = #{email},</if>
+            <if test="passwordHash != null">password_hash = #{passwordHash},</if>
+        </set>
+        where uid = #{uid}
+    </update>
+</mapper>

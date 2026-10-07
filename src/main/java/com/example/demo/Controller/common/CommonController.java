@@ -4,7 +4,7 @@ import com.example.demo.Result.Result;
 import com.example.demo.Vo.userVO;
 import com.example.demo.context.BaseContext;
 import com.example.demo.service.UserService;
-import com.example.demo.un.user;
+import com.example.demo.un.UserAccount;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,16 +30,16 @@ public class CommonController {
     @GetMapping("/me")
     public Result<userVO> me() {
         Long userId = BaseContext.getCurrentId();
-        user currentUser = userService.getUserInfo(userId.intValue());
+        UserAccount currentUser = userService.getUserInfo(userId);
         if (currentUser == null) {
             return Result.error("用户不存在");
         }
 
         userVO vo = userVO.builder()
-                .id(currentUser.getId())
+                .id(currentUser.getUid())
                 .name(currentUser.getName())
                 .username(currentUser.getUsername())
-                .status(currentUser.getStatus())
+                .email(currentUser.getEmail())
                 .build();
         return Result.success(vo);
     }

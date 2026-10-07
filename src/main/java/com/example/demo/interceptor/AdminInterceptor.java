@@ -1,10 +1,8 @@
 package com.example.demo.interceptor;
 
 import com.example.demo.context.BaseContext;
-import com.example.demo.service.UserService;
-import com.example.demo.un.user;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -13,23 +11,21 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 /**
- * 管理员角色拦截器
- * 仅放行 user.status = 2 的请求；其余登录用户返回 403。
- * 注册在 JWT 拦截器之后，因此 BaseContext.getCurrentId() 一定可用。
+ * 管理员拦截器
+ * 以配置的 uid 判定管理员身份(sky.admin-uid), 其余登录用户返回 403。
+ * 注册在 JWT/Ban 拦截器之后, BaseContext.getCurrentId() 一定可用。
  */
 @Slf4j
 @Component
 public class AdminInterceptor implements HandlerInterceptor {
 
-    // user.status 角色定义：1-普通用户 2-管理员
-    private static final int ADMIN_STATUS = 2;
-
-    @Autowired
-    private UserService userService;
+    // 管理员uid, 从配置 sky.admin-uid 读取, 默认1
+    @Value("${sky.admin-uid}")
+    private long adminUid;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-        // 非 Controller 方法（静态资源等）直接放行
+        // 非 Controller 方法(静态资源等)直接放行
         if (!(handler instanceof HandlerMethod)) {
             return true;
         }
@@ -41,10 +37,9 @@ public class AdminInterceptor implements HandlerInterceptor {
             return false;
         }
 
-        user currentUser = userService.getUserInfo(userId.intValue());
-        if (currentUser == null || currentUser.getStatus() != ADMIN_STATUS) {
-            log.warn("[管理员拦截] {} | userId={} 非管理员(status={})，拒绝访问",
-                    request.getRequestURI(), userId, currentUser == null ? "null" : currentUser.getStatus());
+        if (userId != adminUid) {
+            log.warn("[管理员拦截] {} | userId={} 非管理员(管理员uid={}), 拒绝访问",
+                    request.getRequestURI(), userId, adminUid);
             reject(response);
             return false;
         }

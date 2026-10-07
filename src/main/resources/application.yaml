@@ -1,5 +1,13 @@
 server:
   port: ${SERVER_PORT}
+  # 启用Tomcat RemoteIpValve: 仅当TCP来源是受信代理时才采信XFF, 并从右向左取真实客户端IP
+  forward-headers-strategy: native
+  tomcat:
+    remoteip:
+      # 受信代理网段(正则): 按Nginx实际所在网段收窄, 默认覆盖本机+三段内网+IPv6本机
+      internal-proxies: 127\.\d{1,3}\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|0:0:0:0:0:0:0:1|::1
+      remote-ip-header: X-Forwarded-For
+      protocol-header: X-Forwarded-Proto
 
 spring:
   datasource:
@@ -44,12 +52,14 @@ sky:
     token-name: token
     # 刷新令牌过期时间(7天)
     refresh-ttl: ${JWT_REFRESH-TTL}
+  # 管理员uid(以uid判定管理员身份, 对应 user_account.uid)
+  admin-uid: ${ADMIN_UID}
 
 # Resume缓存配置
 resume:
   cache:
     # 是否启用Redis缓存(本地没有Redis时设为false)
-    enabled: ${RESUME_CACHE_ENABLED:true}
+    enabled: ${RESUME_CACHE_ENABLED:false}
     # 列表缓存过期时间(秒)
     list-ttl: 60
     # 详情缓存过期时间(秒)

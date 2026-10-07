@@ -1,6 +1,7 @@
 package com.example.demo.config;
 
 import com.example.demo.interceptor.AdminInterceptor;
+import com.example.demo.interceptor.BanInterceptor;
 import com.example.demo.interceptor.JWTtoken;
 import com.example.demo.interceptor.RateLimitInterceptor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,11 +21,13 @@ public class WebMvcConfig implements WebMvcConfigurer {
     private RateLimitInterceptor rateLimitInterceptor;
     @Autowired
     private AdminInterceptor adminInterceptor;
+    @Autowired
+    private BanInterceptor banInterceptor;
 
 
     /**
      * 注册自定义拦截器
-     * TODO:放行的接口
+     * 执行顺序: JWT认证 -> 封禁校验 -> 限流; 管理员校验仅挂在 /api/admin/**
      * @param registry
      */
     public void addInterceptors(InterceptorRegistry registry) {
@@ -35,18 +38,30 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "/api/auth/login",
                         "/api/auth/register",
                         "/api/auth/refresh",
+                        "/api/auth/logout",
                         "/image/**"
                 );
+
+        // 封禁校验拦截器: 登录用户每次请求都校验封禁状态(Redis缓存 user:ban:{uid}, TTL 60s)
+        registry.addInterceptor(banInterceptor)
+                .addPathPatterns("/api/**")
+                .excludePathPatterns(
+                        "/api/auth/login",
+                        "/api/auth/register",
+                        "/api/auth/refresh",
+                        "/api/auth/logout",
+                        "/image/**"
+                );
+
+        // 管理员拦截器: 仅保护 /api/admin/**, 以 sky.admin-uid 判定
+        registry.addInterceptor(adminInterceptor)
+                .addPathPatterns("/api/admin/**");
 
         // 限流拦截器：所有 /api/** 接口均受限流保护，按用户或IP计数
         registry.addInterceptor(rateLimitInterceptor)
                 .addPathPatterns("/api/**")
                 .excludePathPatterns("/image/**");
 
-        // 管理员角色拦截器：仅放行 user.status=2 的用户
-        // 注册顺序在 JWT 之后，可直接从 BaseContext 取当前登录用户ID
-        registry.addInterceptor(adminInterceptor)
-                .addPathPatterns("/api/admin/**");
 
      }
 
